@@ -1,3 +1,11 @@
+//This algorithm generates a weekly schedule for a store with the following constraints:
+//- Each day must have at least 1 MOD (manager on duty) who is a lead employee.
+//- Leads prefer either opening or closing shifts, but can be scheduled for the opposite if needed.
+//- Full-time employees should be scheduled for 9-hour shifts to meet their weekly hours, but can be adjusted if needed.
+//- Part-time employees are scheduled based on their availability windows and remaining hours, with a minimum shift length of 3 hours.
+//- Employees have a preferred day off, which is a soft constraint (try to honor but can override if necessary).
+//The algorithm first filters available employees for each day, then assigns MODs, followed by remaining leads and non-leads, while tracking assigned hours and days worked to ensure constraints are met. Finally, it validates the schedule and outputs any warnings.
+
 class Employee {
     constructor(name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability) {
         this.name = name;
@@ -11,7 +19,7 @@ class Employee {
         this.assignedHours = 0;
         this.modHours = 0;
         this.daysWorked = 0;
-        this.daysToWork = isFullTime ? Math.ceil(hoursPerWeek / 9) : Infinity; // PT uses hours remaining, not days
+        this.daysToWork = isFullTime ? Math.ceil(hoursPerWeek / 9) : Infinity; //PT uses hours remaining, not days
         this.schedule = {};
     }
 }
@@ -46,25 +54,25 @@ let finalSchedule = {
 
 function canWork(emp) {
     if (!emp.isFullTime) {
-        // PT only checks remaining hours
+        //PT only checks remaining hours
         return emp.assignedHours < emp.hoursPerWeek;
     }
-    // FT checks both hours and days
+    //FT checks both hours and days
     return emp.assignedHours < emp.hoursPerWeek && emp.daysWorked < emp.daysToWork;
 }
 
 function getPTShiftHours(emp, day) {
     let window = emp.availability[day];
-    let windowLength = window[1] - window[0];         // how long their availability window is
-    let hoursRemaining = emp.hoursPerWeek - emp.assignedHours; // how many hours they still need
-    return Math.min(windowLength, hoursRemaining);    // assign whichever is smaller
+    let windowLength = window[1] - window[0];         //how long their availability window is
+    let hoursRemaining = emp.hoursPerWeek - emp.assignedHours; //how many hours they still need
+    return Math.min(windowLength, hoursRemaining);    //assign whichever is smaller
 }
 
 function getPTShiftLabel(emp, day) {
     let window = emp.availability[day];
     let hoursRemaining = emp.hoursPerWeek - emp.assignedHours;
     let shiftLength = Math.min(window[1] - window[0], hoursRemaining);
-    let start = emp.preferClosing ? window[1] - shiftLength : window[0]; // close pref = work end of window
+    let start = emp.preferClosing ? window[1] - shiftLength : window[0]; //close pref = work end of window
     let end = start + shiftLength;
     return `${start > 12 ? start - 12 : start}:00-${end > 12 ? end - 12 : end}:00`;
 }
@@ -83,7 +91,7 @@ function assignShifts(day, availableEmployees) {
 
     let assignedLeadNames = [];
 
-    // assign opening lead MOD
+    //assign opening lead MOD
     let openerLead = leads.find(l => !l.preferClosing);
     if (openerLead) {
         let shift = day === "Saturday" ? "8-5" : "9-6";
@@ -91,10 +99,10 @@ function assignShifts(day, availableEmployees) {
         assignedLeadNames.push(openerLead.name);
     }
 
-    // assign closing lead MOD
+    //assign closing lead MOD
     let closerLead = leads.find(l => l.preferClosing && !assignedLeadNames.includes(l.name));
 
-    // if no prefer-closing lead found, use any remaining lead
+    //if no prefer-closing lead found, use any remaining lead
     if (!closerLead) {
         closerLead = leads.find(l => !assignedLeadNames.includes(l.name));
     }
@@ -104,12 +112,12 @@ function assignShifts(day, availableEmployees) {
         assignedLeadNames.push(closerLead.name);
     }
 
-    // flag if MOD coverage is incomplete
+    //flag if MOD coverage is incomplete
     if (assignedLeadNames.length < 2) {
         finalSchedule[day].push({ warning: "MOD coverage incomplete - review needed" });
     }
 
-    // assign remaining leads as regular employees if any left
+    //assign remaining leads as regular employees if any left
     let remainingLeads = leads.filter(l => !assignedLeadNames.includes(l.name));
     for (let lead of remainingLeads) {
         if (!canWork(lead)) continue;
@@ -117,16 +125,16 @@ function assignShifts(day, availableEmployees) {
         assignEmployee(day, lead, shift, false);
     }
 
-    // assign non-leads
+    //assign non-leads
     for (let emp of nonLeads) {
         if (!canWork(emp)) continue;
         if (emp.isFullTime) {
             let shift = emp.preferClosing ? "1-10" : "9-6";
             assignEmployee(day, emp, shift, false);
         } else {
-            // PT: calculate shift based on availability window and remaining hours
+            //PT: calculate shift based on availability window and remaining hours
             let shiftHours = getPTShiftHours(emp, day);
-            if (shiftHours < 3) continue; // not worth scheduling for less than 3 hours
+            if (shiftHours < 3) continue; //not worth scheduling for less than 3 hours
             let shiftLabel = getPTShiftLabel(emp, day);
             assignEmployee(day, emp, shiftLabel, false, shiftHours);
         }
@@ -141,19 +149,19 @@ function generateSchedule(employees) {
         for (let j = 0; j < employees.length; j++) {
             let emp = employees[j];
 
-            // skip if already hit their hours or days limit
+            //skip if already hit their hours or days limit
             if (!canWork(emp)) continue;
 
-            // skip preferred day off (soft constraint)
+            //skip preferred day off (soft constraint)
             if (emp.preferredDayOff === day) continue;
 
-            // FT always available
+            //FT always available
             if (emp.isFullTime) {
                 availableEmployees.push(emp);
                 continue;
             }
 
-            // PT check availability map
+            //PT check availability map
             if (emp.availability[day] !== null) {
                 availableEmployees.push(emp);
             }
@@ -171,7 +179,7 @@ function validateSchedule(employees) {
             warnings.push(`${emp.name} only has ${emp.modHours} MOD hours this week (minimum 10)`);
         }
         if (emp.isFullTime) {
-            // FT employees may go slightly over due to 9hr shift math, allow up to 5hr overage
+            //FT employees may go slightly over due to 9hr shift math, allow up to 5hr overage
             if (emp.assignedHours > emp.hoursPerWeek + 5) {
                 warnings.push(`${emp.name} is assigned ${emp.assignedHours} hours but needs ${emp.hoursPerWeek} (significantly over)`);
             } else if (emp.assignedHours < emp.hoursPerWeek) {
@@ -195,9 +203,9 @@ function validateSchedule(employees) {
 }
 
 
-// tests
+//tests
 
-let employees = [ // name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability
+let employees = [ //name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability
     new Employee("Alice",   "BOA", true,  40, true,  "Monday",    false, null),
     new Employee("Bob",     "BOA", true,  40, true,  "Tuesday",   true,  null),
     new Employee("Charlie", "BOA", true,  36, false, "Wednesday", false, null),
