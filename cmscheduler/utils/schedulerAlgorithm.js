@@ -7,7 +7,7 @@
 //The algorithm first filters available employees for each day, then assigns MODs, followed by remaining leads and non-leads, while tracking assigned hours and days worked to ensure constraints are met. Finally, it validates the schedule and outputs any warnings.
 
 class Employee {
-    constructor(name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability) {
+    constructor(name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability, isOffSaturday = false) {
         this.name = name;
         this.role = role;
         this.isFullTime = isFullTime;
@@ -21,6 +21,9 @@ class Employee {
         this.daysWorked = 0;
         this.daysToWork = isFullTime ? Math.ceil(hoursPerWeek / 9) : Infinity; //PT uses hours remaining, not days
         this.schedule = {};
+        this.isOffSaturday = isOffSaturday;
+        this.saturdayReserved = false;
+        this.reservedSaturdayHours = 0;
     }
 }
 
@@ -52,27 +55,31 @@ let finalSchedule = {
     "Saturday":  []
 };
 
-function canWork(emp) {
+function canWork(emp, day) {
     if (!emp.isFullTime) {
-        //PT only checks remaining hours
-        return emp.assignedHours < emp.hoursPerWeek;
+        // On Saturday use full budget; Mon-Fri subtract reserved Saturday hours
+        let effectiveMax = (day === "Saturday") ? emp.hoursPerWeek : emp.hoursPerWeek - emp.reservedSaturdayHours;
+        return emp.assignedHours < effectiveMax;
     }
-    //FT checks both hours and days
-    return emp.assignedHours < emp.hoursPerWeek && emp.daysWorked < emp.daysToWork;
+    // FT: on Mon-Fri, reserve one day for Saturday if flagged
+    let effectiveDaysToWork = (day !== "Saturday" && emp.saturdayReserved) ? emp.daysToWork - 1 : emp.daysToWork;
+    return emp.assignedHours < emp.hoursPerWeek && emp.daysWorked < effectiveDaysToWork;
 }
 
 function getPTShiftHours(emp, day) {
     let window = emp.availability[day];
-    let windowLength = window[1] - window[0];         //how long their availability window is
-    let hoursRemaining = emp.hoursPerWeek - emp.assignedHours; //how many hours they still need
-    return Math.min(windowLength, hoursRemaining);    //assign whichever is smaller
+    let windowLength = window[1] - window[0];
+    let effectiveMax = (day === "Saturday") ? emp.hoursPerWeek : emp.hoursPerWeek - emp.reservedSaturdayHours;
+    let hoursRemaining = effectiveMax - emp.assignedHours;
+    return Math.min(windowLength, hoursRemaining);
 }
 
 function getPTShiftLabel(emp, day) {
     let window = emp.availability[day];
-    let hoursRemaining = emp.hoursPerWeek - emp.assignedHours;
+    let effectiveMax = (day === "Saturday") ? emp.hoursPerWeek : emp.hoursPerWeek - emp.reservedSaturdayHours;
+    let hoursRemaining = effectiveMax - emp.assignedHours;
     let shiftLength = Math.min(window[1] - window[0], hoursRemaining);
-    let start = emp.preferClosing ? window[1] - shiftLength : window[0]; //close pref = work end of window
+    let start = emp.preferClosing ? window[1] - shiftLength : window[0];
     let end = start + shiftLength;
     return `${start > 12 ? start - 12 : start}:00-${end > 12 ? end - 12 : end}:00`;
 }
@@ -86,8 +93,8 @@ function assignEmployee(day, emp, shift, isMOD, shiftHours = 9) {
 }
 
 function assignShifts(day, availableEmployees) {
-    let leads = availableEmployees.filter(emp => emp.isLead && canWork(emp));
-    let nonLeads = availableEmployees.filter(emp => !emp.isLead && canWork(emp));
+    let leads = availableEmployees.filter(emp => emp.isLead && canWork(emp, day));
+    let nonLeads = availableEmployees.filter(emp => !emp.isLead && canWork(emp, day));
 
     let assignedLeadNames = [];
 
@@ -120,14 +127,14 @@ function assignShifts(day, availableEmployees) {
     //assign remaining leads as regular employees if any left
     let remainingLeads = leads.filter(l => !assignedLeadNames.includes(l.name));
     for (let lead of remainingLeads) {
-        if (!canWork(lead)) continue;
+        if (!canWork(lead, day)) continue;
         let shift = lead.preferClosing ? "1-10" : "9-6";
         assignEmployee(day, lead, shift, false);
     }
 
     //assign non-leads
     for (let emp of nonLeads) {
-        if (!canWork(emp)) continue;
+        if (!canWork(emp, day)) continue;
         if (emp.isFullTime) {
             let shift = emp.preferClosing ? "1-10" : "9-6";
             assignEmployee(day, emp, shift, false);
@@ -141,7 +148,31 @@ function assignShifts(day, availableEmployees) {
     }
 }
 
+function reserveSaturday(employees) {
+    for (let emp of employees) {
+        emp.saturdayReserved = false;
+        emp.reservedSaturdayHours = 0;
+
+        if (emp.isOffSaturday) continue;
+        if (emp.preferredDayOff === "Saturday") continue;
+
+        if (emp.isFullTime) {
+            emp.saturdayReserved = true;
+        } else {
+            if (emp.availability["Saturday"] !== null) {
+                let window = emp.availability["Saturday"];
+                let shiftHours = Math.min(window[1] - window[0], emp.hoursPerWeek);
+                if (shiftHours >= 3) {
+                    emp.saturdayReserved = true;
+                    emp.reservedSaturdayHours = shiftHours;
+                }
+            }
+        }
+    }
+}
+
 function generateSchedule(employees) {
+    reserveSaturday(employees);
     for (let i = 0; i < workDays.length; i++) {
         let day = workDays[i];
         let availableEmployees = [];
@@ -150,10 +181,13 @@ function generateSchedule(employees) {
             let emp = employees[j];
 
             //skip if already hit their hours or days limit
-            if (!canWork(emp)) continue;
+            if (!canWork(emp, day)) continue;
 
             //skip preferred day off (soft constraint)
             if (emp.preferredDayOff === day) continue;
+
+            //FT: skip Saturday if they have their monthly Saturday off
+            if (emp.isFullTime && day === "Saturday" && emp.isOffSaturday) continue;
 
             //FT always available
             if (emp.isFullTime) {
@@ -205,12 +239,12 @@ function validateSchedule(employees) {
 
 //tests
 
-let employees = [ //name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability
-    new Employee("Alice",   "BOA", true,  40, true,  "Monday",    false, null),
-    new Employee("Bob",     "BOA", true,  40, true,  "Tuesday",   true,  null),
-    new Employee("Charlie", "BOA", true,  36, false, "Wednesday", false, null),
-    new Employee("Grace",   "BOA", true,  32, false, "Monday",    false, null),
-    new Employee("Heidi",   "BOA", true,  32, false, "Tuesday",   true,  null),
+let employees = [ //name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability, isOffSaturday
+    new Employee("Alice",   "BOA", true,  40, true,  "Monday",    false, null, false), // working Saturday
+    new Employee("Bob",     "BOA", true,  40, true,  "Tuesday",   true,  null, false), // working Saturday
+    new Employee("Charlie", "BOA", true,  36, false, "Wednesday", false, null, true),  // off Saturday this month
+    new Employee("Grace",   "BOA", true,  32, false, "Monday",    false, null, true),  // off Saturday this month
+    new Employee("Heidi",   "BOA", true,  32, false, "Tuesday",   true,  null, false), // working Saturday
     new Employee("Diana",   "BOA", false, 24, false, "Thursday",  true,  { "Monday": [13, 22], "Tuesday": [13, 22], "Wednesday": [13, 22], "Thursday": null,    "Friday": [13, 22], "Saturday": [9, 18] }),
     new Employee("Eve",     "BOA", false, 19, false, "Friday",    false, { "Monday": [8, 14],  "Tuesday": [8, 14],  "Wednesday": [8, 14],  "Thursday": [8, 14], "Friday": null,     "Saturday": [9, 15] }),
     new Employee("Frank",   "BOA", false, 15, false, "Saturday",  true,  { "Monday": [14, 22], "Tuesday": [14, 22], "Wednesday": [14, 22], "Thursday": [14, 22], "Friday": [14, 22], "Saturday": null }),
