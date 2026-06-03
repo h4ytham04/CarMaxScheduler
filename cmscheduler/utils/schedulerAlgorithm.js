@@ -172,6 +172,8 @@ function reserveSaturday(employees) {
 }
 
 function generateSchedule(employees) {
+    // Reset schedule before each run
+    for (let day of workDays) finalSchedule[day] = [];
     reserveSaturday(employees);
     for (let i = 0; i < workDays.length; i++) {
         let day = workDays[i];
@@ -237,20 +239,8 @@ function validateSchedule(employees) {
 }
 
 
-//tests
+// Example employee data for manual CLI testing:
+// new Employee("Alice", "BOA", true, 40, true, "Monday", false, null, false)
+// Run: node utils/schedulerAlgorithm.js  (after temporarily uncommenting the block below)
 
-let employees = [ //name, role, isFullTime, hoursPerWeek, isLead, preferredDayOff, preferClosing, availability, isOffSaturday
-    new Employee("Alice",   "BOA", true,  40, true,  "Monday",    false, null, false), // working Saturday
-    new Employee("Bob",     "BOA", true,  40, true,  "Tuesday",   true,  null, false), // working Saturday
-    new Employee("Charlie", "BOA", true,  36, false, "Wednesday", false, null, true),  // off Saturday this month
-    new Employee("Grace",   "BOA", true,  32, false, "Monday",    false, null, true),  // off Saturday this month
-    new Employee("Heidi",   "BOA", true,  32, false, "Tuesday",   true,  null, false), // working Saturday
-    new Employee("Diana",   "BOA", false, 24, false, "Thursday",  true,  { "Monday": [13, 22], "Tuesday": [13, 22], "Wednesday": [13, 22], "Thursday": null,    "Friday": [13, 22], "Saturday": [9, 18] }),
-    new Employee("Eve",     "BOA", false, 19, false, "Friday",    false, { "Monday": [8, 14],  "Tuesday": [8, 14],  "Wednesday": [8, 14],  "Thursday": [8, 14], "Friday": null,     "Saturday": [9, 15] }),
-    new Employee("Frank",   "BOA", false, 15, false, "Saturday",  true,  { "Monday": [14, 22], "Tuesday": [14, 22], "Wednesday": [14, 22], "Thursday": [14, 22], "Friday": [14, 22], "Saturday": null }),
-    new Employee("Ivan",    "BOA", false, 11, false, "Wednesday", false, { "Monday": null,     "Tuesday": [8, 14],  "Wednesday": null,     "Thursday": null,    "Friday": [16, 22], "Saturday": [9, 14] }),
-];
-
-generateSchedule(employees);
-console.log("Final Schedule:", JSON.stringify(finalSchedule, null, 2));
-console.log("Validation Warnings:", validateSchedule(employees));
+export { Employee, generateSchedule, validateSchedule, finalSchedule };
