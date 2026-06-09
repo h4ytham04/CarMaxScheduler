@@ -86,6 +86,15 @@ export function saveSchedule(schedule: Omit<ScheduleData, "id">): ScheduleData {
   return newSchedule;
 }
 
+export function updateSchedule(id: string, updates: Partial<Omit<ScheduleData, "id">>): void {
+  const schedules = getSchedules();
+  const idx = schedules.findIndex((s) => s.id === id);
+  if (idx !== -1) {
+    schedules[idx] = { ...schedules[idx], ...updates };
+    localStorage.setItem(SCHEDULES_KEY, JSON.stringify(schedules));
+  }
+}
+
 export function getMostRecentSchedule(): ScheduleData | null {
   const schedules = getSchedules();
   return schedules.length > 0 ? schedules[schedules.length - 1] : null;

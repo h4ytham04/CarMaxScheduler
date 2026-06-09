@@ -71,14 +71,14 @@ function getPTShiftHours(emp, day) {
     let windowLength = window[1] - window[0];
     let effectiveMax = (day === "Saturday") ? emp.hoursPerWeek : emp.hoursPerWeek - emp.reservedSaturdayHours;
     let hoursRemaining = effectiveMax - emp.assignedHours;
-    return Math.min(windowLength, hoursRemaining);
+    return Math.min(windowLength, hoursRemaining, 9);
 }
 
 function getPTShiftLabel(emp, day) {
     let window = emp.availability[day];
     let effectiveMax = (day === "Saturday") ? emp.hoursPerWeek : emp.hoursPerWeek - emp.reservedSaturdayHours;
     let hoursRemaining = effectiveMax - emp.assignedHours;
-    let shiftLength = Math.min(window[1] - window[0], hoursRemaining);
+    let shiftLength = Math.min(window[1] - window[0], hoursRemaining, 9);
     let start = emp.preferClosing ? window[1] - shiftLength : window[0];
     let end = start + shiftLength;
     return `${start > 12 ? start - 12 : start}:00-${end > 12 ? end - 12 : end}:00`;

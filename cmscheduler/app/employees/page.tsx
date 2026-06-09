@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import {
   getEmployees,
@@ -9,6 +9,14 @@ import {
   deleteEmployee,
   EmployeeData,
 } from "@/utils/localStorageHelpers";
+
+function CarIcon({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg viewBox="0 0 640 512" fill="white" className={className} style={style}>
+      <path d="M171.3 96H224v96H111.3l30.4-75.9C146.5 102 158.2 96 171.3 96zM272 192V96h81.2c9.7 0 18.9 4.4 25 12l67.2 84H272zm256.2 1L428.2 68c-18.2-22.8-45.8-36-75-36H171.3c-39.3 0-74.6 23.9-89.1 60.3L40.6 196.4C16.8 205.8 0 228.9 0 256V368c0 17.7 14.3 32 32 32H65.3c7.6 45.4 47.1 80 94.7 80s87.1-34.6 94.7-80H385.3c7.6 45.4 47.1 80 94.7 80s87.1-34.6 94.7-80H608c17.7 0 32-14.3 32-32V320c0-65.2-48.8-119-111.8-127zM160 368a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zm256 0a48 48 0 1 1 96 0 48 48 0 1 1 -96 0z" />
+    </svg>
+  );
+}
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
@@ -46,6 +54,15 @@ export default function EmployeesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [expandedEmpId, setExpandedEmpId] = useState<string | null>("all");
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  const toggleAvail = (id: string) =>
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   useEffect(() => {
     setEmployees(getEmployees());
@@ -126,11 +143,11 @@ export default function EmployeesPage() {
         <div className="mb-8 flex items-center justify-between">
           <button
             onClick={() => router.push("/")}
-            className="text-sm text-slate-500 hover:text-slate-800"
+            className="text-sm text-slate-500 hover:text-slate-800 flex items-center border border-slate-300 rounded-full px-3 py-1"
           >
-            ← Back
+            Return to Scheduler
           </button>
-          <h1 className="text-3xl font-bold text-slate-800">Associates</h1>
+          <h1 className="text-3xl font-bold text-slate-800 align-middle">Associates</h1>
           <button
             onClick={openAdd}
             className="rounded-full px-5 py-2 text-sm font-semibold text-white"
@@ -308,19 +325,20 @@ export default function EmployeesPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {employees.map((emp) => (
-              <div
-                key={emp.id}
-                className="flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm"
-              >
+            {employees.map((emp) => {
+              const isExpanded = !collapsedIds.has(emp.id);
+              const avail = emp.availability as Record<string, [number, number] | null> | null;
+              return (
+              <div key={emp.id} className="overflow-hidden rounded-xl bg-white shadow-sm">
+                <div className="flex items-center justify-between px-5 py-4">
                 <div>
                   <p className="font-semibold text-slate-800">{emp.name}</p>
                   <p className="text-sm text-slate-500">
                     {emp.role || "No role"} &middot;{" "}
                     {emp.isFullTime ? "Full-Time" : "Part-Time"} &middot;{" "}
                     {emp.hoursPerWeek}h/wk
-                    {emp.isLead && <span className="ml-1 text-blue-600 font-medium">· Lead</span>}
-                    {emp.isOffSaturday && <span className="ml-1 text-orange-500">· Off Sat</span>}
+                    {emp.isLead && <span className="ml-1 text-blue-600 font-medium">&middot; Lead</span>}
+                    {emp.isOffSaturday && <span className="ml-1 text-orange-500">&middot; Off Sat</span>}
                   </p>
                 </div>
 
@@ -359,7 +377,78 @@ export default function EmployeesPage() {
                   )}
                 </div>
               </div>
-            ))}
+
+              {/* Availability panel */}
+              {isExpanded && (
+                <div className="border-t border-slate-100 px-5 py-4">
+                  <div className="mb-3 flex flex-wrap gap-4 text-xs text-slate-500">
+                    <span>Preferred day off: <strong className="text-slate-700">{emp.preferredDayOff}</strong></span>
+                    <span>Closing pref: <strong className="text-slate-700">{emp.preferClosing ? "Yes" : "No"}</strong></span>
+                  </div>
+                  {emp.isFullTime ? (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                      {DAYS.map((day) => (
+                        <div key={day} className={`rounded-lg border p-2 text-center text-xs ${
+                          emp.preferredDayOff === day
+                            ? "border-orange-200 bg-orange-50 text-orange-600"
+                            : "border-slate-100 bg-slate-50 text-slate-600"
+                        }`}>
+                          <p className="font-semibold">{day.slice(0, 3)}</p>
+                          <p className="mt-0.5">{emp.preferredDayOff === day ? "Day off" : "Available"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                      {DAYS.map((day) => {
+                        const window = avail?.[day] ?? null;
+                        const isOff = window === null;
+                        const isPrefOff = emp.preferredDayOff === day;
+                        return (
+                          <div key={day} className={`rounded-lg border p-2 text-center text-xs ${
+                            isOff
+                              ? "border-slate-200 bg-slate-50 text-slate-400"
+                              : isPrefOff
+                              ? "border-orange-200 bg-orange-50 text-orange-600"
+                              : "border-blue-100 bg-blue-50 text-blue-700"
+                          }`}>
+                            <p className="font-semibold">{day.slice(0, 3)}</p>
+                            {isOff ? (
+                              <p className="mt-0.5">N/A</p>
+                            ) : (
+                              <p className="mt-0.5">
+                                {(window as [number,number])[0]}:00–{(window as [number,number])[1]}:00
+                                {isPrefOff && <span className="block text-orange-500">Pref. off</span>}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-3 text-center">
+                    <button
+                      onClick={() => toggleAvail(emp.id)}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      Hide
+                    </button>
+                  </div>
+                </div>
+              )}
+              {!isExpanded && (
+                <div className="border-t border-slate-100 py-1 text-center">
+                  <button
+                    onClick={() => toggleAvail(emp.id)}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Show Availability
+                  </button>
+                </div>
+              )}
+            </div>
+            );
+          })}
           </div>
         )}
       </div>

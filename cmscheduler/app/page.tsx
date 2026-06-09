@@ -1,18 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import {
   getEmployees,
   getSchedules,
   saveSchedule,
   deleteSchedule,
+  updateSchedule,
   EmployeeData,
   ScheduleData,
+  ShiftEntry,
 } from "@/utils/localStorageHelpers";
 
 const carmaxBlue = "#003366";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function CarIcon({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg viewBox="0 0 640 512" fill="white" className={className} style={style}>
+      <path d="M171.3 96H224v96H111.3l30.4-75.9C146.5 102 158.2 96 171.3 96zM272 192V96h81.2c9.7 0 18.9 4.4 25 12l67.2 84H272zm256.2 1L428.2 68c-18.2-22.8-45.8-36-75-36H171.3c-39.3 0-74.6 23.9-89.1 60.3L40.6 196.4C16.8 205.8 0 228.9 0 256V368c0 17.7 14.3 32 32 32H65.3c7.6 45.4 47.1 80 94.7 80s87.1-34.6 94.7-80H385.3c7.6 45.4 47.1 80 94.7 80s87.1-34.6 94.7-80H608c17.7 0 32-14.3 32-32V320c0-65.2-48.8-119-111.8-127zM160 368a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zm256 0a48 48 0 1 1 96 0 48 48 0 1 1 -96 0z" />
+    </svg>
+  );
+}
 
 function getNextMonday(): string {
   const today = new Date();
@@ -36,6 +46,8 @@ export default function Home() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Record<string, ShiftEntry[]>>({});
 
   useEffect(() => {
     setEmployees(getEmployees());
@@ -90,28 +102,76 @@ export default function Home() {
     deleteSchedule(id);
     setConfirmDeleteId(null);
     if (expandedId === id) setExpandedId(null);
+    if (editingId === id) { setEditingId(null); setEditDraft({}); }
     refresh();
   };
 
+  const startEdit = (sched: ScheduleData) => {
+    setEditingId(sched.id);
+    setEditDraft(JSON.parse(JSON.stringify(sched.schedule)));
+    setExpandedId(sched.id);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft({});
+  };
+
+  const saveEdit = (id: string) => {
+    updateSchedule(id, { schedule: editDraft });
+    setEditingId(null);
+    setEditDraft({});
+    refresh();
+  };
+
+  const updateDraftEntry = (day: string, idx: number, field: keyof ShiftEntry, value: string | boolean) => {
+    setEditDraft((prev) => {
+      const dayEntries = [...(prev[day] ?? [])];
+      dayEntries[idx] = { ...dayEntries[idx], [field]: value };
+      return { ...prev, [day]: dayEntries };
+    });
+  };
+
+  const removeDraftEntry = (day: string, idx: number) => {
+    setEditDraft((prev) => ({
+      ...prev,
+      [day]: (prev[day] ?? []).filter((_, i) => i !== idx),
+    }));
+  };
+
+  const addDraftEntry = (day: string) => {
+    setEditDraft((prev) => ({
+      ...prev,
+      [day]: [...(prev[day] ?? []), { name: "", shift: "", isMOD: false }],
+    }));
+  };
+
   return (
-    <div className="relative min-h-screen bg-slate-100 text-slate-900">
-      <div className="mx-auto max-w-4xl px-4 py-10">
+    <div
+      className="relative min-h-screen flex flex-col text-slate-900 overflow-hidden"
+      style={{ background: "linear-gradient(135deg, #001a33 0%, #003366 60%, #00244d 100%)" }}
+    >
+      <CarIcon className="pointer-events-none fixed top-0 left-0 w-64 -translate-x-10 -translate-y-10 rotate-12 opacity-[0.08]" />
+      <CarIcon className="pointer-events-none fixed top-0 right-0 w-64 translate-x-10 -translate-y-10 -rotate-12 opacity-[0.08]" style={{ transform: "scaleX(-1) rotate(-12deg) translateX(40px) translateY(-40px)" }} />
+      <CarIcon className="pointer-events-none fixed bottom-0 left-0 w-48 -translate-x-6 translate-y-8 -rotate-6 opacity-[0.06]" />
+      <CarIcon className="pointer-events-none fixed bottom-0 right-0 w-48 translate-x-6 translate-y-8 rotate-6 opacity-[0.06]" style={{ transform: "scaleX(-1) rotate(6deg) translateX(24px) translateY(32px)" }} />
+      <div className="flex-1 mx-auto max-w-4xl px-4 py-10 flex flex-col">
 
         {/* ── Header ── */}
         <div className="mb-10 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-slate-800">ScheduleMax</h1>
+          <h1 className="text-3xl font-bold text-white">ScheduleMax</h1>
           <button
             onClick={() => router.push("/employees")}
             className="rounded-full px-5 py-2 text-sm font-semibold text-white"
             style={{ backgroundColor: carmaxBlue, cursor: "pointer" }}
           >
-            Edit Associates
+            Associates Information
           </button>
         </div>
 
         {/* ── Associates ── */}
         <section className="mb-10">
-          <h2 className="mb-3 text-base font-semibold text-slate-600 uppercase tracking-wide">
+          <h2 className="mb-3 text-base font-semibold text-blue-200 uppercase tracking-wide">
             Associates ({employees.length})
           </h2>
           {employees.length === 0 ? (
@@ -153,7 +213,7 @@ export default function Home() {
 
         {/* ── Generate Schedule ── */}
         <section className="mb-10">
-          <h2 className="mb-3 text-base font-semibold text-slate-600 uppercase tracking-wide">
+          <h2 className="mb-3 text-base font-semibold text-blue-200 uppercase tracking-wide">
             Generate Schedule
           </h2>
           <div className="rounded-xl bg-white px-6 py-5 shadow-sm">
@@ -191,7 +251,7 @@ export default function Home() {
 
         {/* ── Schedules ── */}
         <section>
-          <h2 className="mb-3 text-base font-semibold text-slate-600 uppercase tracking-wide">
+          <h2 className="mb-3 text-base font-semibold text-blue-200 uppercase tracking-wide">
             Schedules ({schedules.length})
           </h2>
           {schedules.length === 0 ? (
@@ -202,6 +262,7 @@ export default function Home() {
             <div className="space-y-3">
               {[...schedules].reverse().map((sched) => {
                 const isExpanded = expandedId === sched.id;
+                const isEditing = editingId === sched.id;
                 const weekDate = new Date(sched.weekOf + "T00:00:00").toLocaleDateString("en-US", {
                   month: "long", day: "numeric", year: "numeric",
                 });
@@ -222,10 +283,16 @@ export default function Home() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => setExpandedId(isExpanded ? null : sched.id)}
+                          onClick={() => { if (isExpanded) { if (isEditing) cancelEdit(); setExpandedId(null); } else { setExpandedId(sched.id); } }}
                           className="rounded-full bg-slate-100 px-4 py-1 text-sm text-slate-700 hover:bg-slate-200"
                         >
                           {isExpanded ? "Collapse" : "View"}
+                        </button>
+                        <button
+                          onClick={() => startEdit(sched)}
+                          className="rounded-full bg-blue-50 px-4 py-1 text-sm text-blue-600 hover:bg-blue-100"
+                        >
+                          Edit
                         </button>
                         {confirmDeleteId === sched.id ? (
                           <>
@@ -254,46 +321,120 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Expanded day-by-day view */}
+                    {/* Expanded view */}
                     {isExpanded && (
                       <div className="border-t border-slate-100 px-5 py-4">
-                        {sched.warnings.length > 0 && (
-                          <div className="mb-4 rounded-lg bg-amber-50 p-3">
-                            <p className="mb-1 text-xs font-semibold text-amber-700">Warnings</p>
-                            {sched.warnings.map((w, i) => (
-                              <p key={i} className="text-xs text-amber-600">{w}</p>
-                            ))}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-                          {DAYS.map((day) => {
-                            const entries = sched.schedule[day] ?? [];
-                            return (
-                              <div key={day} className="rounded-lg border border-slate-100 p-3">
-                                <p className="mb-2 font-semibold text-slate-700">{day}</p>
-                                {entries.length === 0 ? (
-                                  <p className="text-xs text-slate-400">No shifts</p>
-                                ) : (
-                                  entries.map((entry, i) =>
-                                    entry.warning ? (
-                                      <p key={i} className="text-xs text-amber-500">{entry.warning}</p>
-                                    ) : (
-                                      <div key={i} className="flex items-center justify-between py-0.5">
-                                        <span className="text-sm text-slate-800">{entry.name}</span>
-                                        <span className="text-xs text-slate-500">
-                                          {entry.shift}
-                                          {entry.isMOD && (
-                                            <span className="ml-1 font-medium text-blue-500">MOD</span>
-                                          )}
-                                        </span>
-                                      </div>
-                                    )
-                                  )
-                                )}
+                        {isEditing ? (
+                          <>
+                            <div className="mb-4 flex items-center gap-2">
+                              <button
+                                onClick={() => saveEdit(sched.id)}
+                                className="rounded-full px-5 py-1.5 text-sm font-semibold text-white"
+                                style={{ backgroundColor: carmaxBlue }}
+                              >
+                                Save Changes
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                className="rounded-full bg-slate-100 px-5 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                              >
+                                Cancel
+                              </button>
+                              <span className="ml-1 text-xs text-slate-400">≤ 9 hours per shift</span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                              {DAYS.map((day) => {
+                                const entries = editDraft[day] ?? [];
+                                return (
+                                  <div key={day} className="rounded-lg border border-blue-200 bg-blue-50/30 p-3">
+                                    <p className="mb-2 font-semibold text-slate-700">{day}</p>
+                                    {entries.map((entry, i) =>
+                                      entry.warning ? (
+                                        <p key={i} className="text-xs text-amber-500">{entry.warning}</p>
+                                      ) : (
+                                        <div key={i} className="mb-1.5 flex items-center gap-1">
+                                          <input
+                                            value={entry.name}
+                                            onChange={(e) => updateDraftEntry(day, i, "name", e.target.value)}
+                                            className="w-24 rounded border border-slate-300 px-1.5 py-0.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            placeholder="Name"
+                                          />
+                                          <input
+                                            value={entry.shift}
+                                            onChange={(e) => updateDraftEntry(day, i, "shift", e.target.value)}
+                                            className="w-14 rounded border border-slate-300 px-1.5 py-0.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            placeholder="Shift"
+                                          />
+                                          <label className="flex cursor-pointer select-none items-center gap-0.5 text-xs text-slate-600">
+                                            <input
+                                              type="checkbox"
+                                              checked={!!entry.isMOD}
+                                              onChange={(e) => updateDraftEntry(day, i, "isMOD", e.target.checked)}
+                                              className="accent-blue-600"
+                                            />
+                                            MOD
+                                          </label>
+                                          <button
+                                            onClick={() => removeDraftEntry(day, i)}
+                                            className="ml-auto text-xs text-red-400 hover:text-red-600"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      )
+                                    )}
+                                    <button
+                                      onClick={() => addDraftEntry(day)}
+                                      className="mt-1 text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                      + Add
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {sched.warnings.length > 0 && (
+                              <div className="mb-4 rounded-lg bg-amber-50 p-3">
+                                <p className="mb-1 text-xs font-semibold text-amber-700">Warnings</p>
+                                {sched.warnings.map((w, i) => (
+                                  <p key={i} className="text-xs text-amber-600">{w}</p>
+                                ))}
                               </div>
-                            );
-                          })}
-                        </div>
+                            )}
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                              {DAYS.map((day) => {
+                                const entries = sched.schedule[day] ?? [];
+                                return (
+                                  <div key={day} className="rounded-lg border border-slate-100 p-3">
+                                    <p className="mb-2 font-semibold text-slate-700">{day}</p>
+                                    {entries.length === 0 ? (
+                                      <p className="text-xs text-slate-400">No shifts</p>
+                                    ) : (
+                                      entries.map((entry, i) =>
+                                        entry.warning ? (
+                                          <p key={i} className="text-xs text-amber-500">{entry.warning}</p>
+                                        ) : (
+                                          <div key={i} className="flex items-center justify-between py-0.5">
+                                            <span className="text-sm text-slate-800">{entry.name}</span>
+                                            <span className="text-xs text-slate-500">
+                                              {entry.shift}
+                                              {entry.isMOD && (
+                                                <span className="ml-1 font-medium text-blue-500">MOD</span>
+                                              )}
+                                            </span>
+                                          </div>
+                                        )
+                                      )
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -302,6 +443,30 @@ export default function Home() {
             </div>
           )}
         </section>
+        <footer className="mt-auto flex flex-col items-center">
+          <p className="mt-10 text-center text-xs text-slate-500">
+            Made by Haytham, an associate at CarMax store 6013. This is an unofficial tool to assist with scheduling and is not endorsed by CarMax. For issues or suggestions, contact Haytham directly.
+          </p>
+          <p className="text-center text-xs text-slate-400">
+            Clearing browser cache will reset all data. Please export any important information before doing so.
+          </p>
+          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
+            <a
+              href="https://github.com/h4ytham04"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-slate-300 hover:text-white transition-colors duration-200"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.483 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.53 1.03 1.53 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z" />
+              </svg>
+              github.com/h4ytham04
+            </a>
+            <a href="https://haythamzaami.com" target="_blank" rel="noopener noreferrer" className="text-slate-300 hover:text-white transition-colors duration-200">
+              haythamzaami.com
+            </a>
+          </p>
+        </footer>
       </div>
 
       {/* ── Terms popup ── */}
