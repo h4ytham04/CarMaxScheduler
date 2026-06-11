@@ -103,7 +103,7 @@ export default function Home() {
 
   const refresh = () => {
     setEmployees(getEmployees());
-    setSchedules(getSchedules());
+    setSchedules(getSchedules()); 
   };
 
   const handleAgree = () => {
