@@ -77,10 +77,7 @@ const animationStyles = `
 export default function Home() {
   const router = useRouter();
 
-  const [accepted, setAccepted] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("scheduleMaxAccepted") === "true";
-  });
+  const [accepted, setAccepted] = useState(false);
   const [closing, setClosing] = useState(false);
   const [employees, setEmployees] = useState<EmployeeData[]>([]);
   const [schedules, setSchedules] = useState<ScheduleData[]>([]);
@@ -96,6 +93,7 @@ export default function Home() {
   const [editDraft, setEditDraft] = useState<Record<string, ShiftEntry[]>>({});
 
   useEffect(() => {
+    if (sessionStorage.getItem("scheduleMaxAccepted") === "true") setAccepted(true);
     setEmployees(getEmployees());
     setSchedules(getSchedules());
     setAiEnabled(getAISettings().enabled);
