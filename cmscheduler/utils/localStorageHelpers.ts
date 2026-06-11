@@ -104,3 +104,30 @@ export function deleteSchedule(id: string): void {
   const schedules = getSchedules().filter((s) => s.id !== id);
   localStorage.setItem(SCHEDULES_KEY, JSON.stringify(schedules));
 }
+
+// ── AI Settings ──────────────────────────────────────────────────────────────
+
+export interface AISettings {
+  enabled: boolean;
+  contextPrompt: string;
+}
+
+const AI_SETTINGS_KEY = "schedulemax_ai_settings";
+
+const defaultAISettings: AISettings = {
+  enabled: false,
+  contextPrompt: "",
+};
+
+export function getAISettings(): AISettings {
+  try {
+    const raw = localStorage.getItem(AI_SETTINGS_KEY);
+    return raw ? { ...defaultAISettings, ...(JSON.parse(raw) as Partial<AISettings>) } : defaultAISettings;
+  } catch {
+    return defaultAISettings;
+  }
+}
+
+export function saveAISettings(settings: AISettings): void {
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(settings));
+}

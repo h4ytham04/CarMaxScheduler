@@ -22,6 +22,48 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 
 const carmaxBlue = "#003366";
 
+const animationStyles = `
+  @keyframes floatA {
+    0%, 100% { transform: translateY(0px) rotate(12deg); }
+    50% { transform: translateY(-18px) rotate(14deg); }
+  }
+  @keyframes floatB {
+    0%, 100% { transform: scaleX(-1) rotate(-12deg) translateX(48px) translateY(-48px); }
+    50% { transform: scaleX(-1) rotate(-10deg) translateX(48px) translateY(-66px); }
+  }
+  @keyframes floatC {
+    0%, 100% { transform: translateY(0px) rotate(-6deg); }
+    50% { transform: translateY(-12px) rotate(-8deg); }
+  }
+  @keyframes floatD {
+    0%, 100% { transform: scaleX(-1) rotate(6deg) translateX(32px) translateY(40px); }
+    50% { transform: scaleX(-1) rotate(8deg) translateX(32px) translateY(28px); }
+  }
+  @keyframes orbPulse {
+    0%, 100% { opacity: 0.12; transform: scale(1); }
+    50% { opacity: 0.18; transform: scale(1.08); }
+  }
+  @keyframes orbPulse2 {
+    0%, 100% { opacity: 0.10; transform: scale(1); }
+    50% { opacity: 0.15; transform: scale(1.06); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .anim-float-a { animation: floatA 7s ease-in-out infinite; }
+  .anim-float-b { animation: floatB 8s ease-in-out infinite; }
+  .anim-float-c { animation: floatC 9s ease-in-out infinite 1s; }
+  .anim-float-d { animation: floatD 10s ease-in-out infinite 0.5s; }
+  .anim-orb-1   { animation: orbPulse 6s ease-in-out infinite; }
+  .anim-orb-2   { animation: orbPulse2 8s ease-in-out infinite 2s; }
+  .anim-fade-up-1 { animation: fadeUp 0.5s ease-out both; }
+  .anim-fade-up-2 { animation: fadeUp 0.5s ease-out 0.12s both; }
+  .anim-fade-up-3 { animation: fadeUp 0.5s ease-out 0.24s both; }
+  .anim-fade-up-4 { animation: fadeUp 0.5s ease-out 0.36s both; }
+  .anim-fade-up-5 { animation: fadeUp 0.5s ease-out 0.48s both; }
+`;
+
 const defaultPTAvailability = (): Record<string, [number, number] | null> => ({
   Monday: [10, 21],
   Tuesday: [10, 21],
@@ -137,17 +179,41 @@ export default function EmployeesPage() {
   const ptAvail = (form.availability as Record<string, [number, number] | null>) ?? defaultPTAvailability();
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-3xl px-4 py-10">
+    <div
+      className="relative min-h-screen overflow-hidden"
+      style={{ background: "linear-gradient(135deg, #001a33 0%, #003366 55%, #00244d 85%, #1a1200 100%)" }}
+    >
+      <style>{animationStyles}</style>
+      {/* Yellow glow orbs */}
+      <div className="anim-orb-1 pointer-events-none fixed top-[-120px] right-[-80px] w-[420px] h-[420px] rounded-full" style={{ background: "radial-gradient(circle, #f5c400 0%, transparent 70%)" }} />
+      <div className="anim-orb-2 pointer-events-none fixed bottom-[-100px] left-[-60px] w-[320px] h-[320px] rounded-full" style={{ background: "radial-gradient(circle, #e6a800 0%, transparent 70%)" }} />
+      <div className="pointer-events-none fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] opacity-[0.05]" style={{ background: "radial-gradient(ellipse, #ffd000 0%, transparent 70%)" }} />
+      {/* ── Background flair ── */}
+      <CarIcon className="anim-float-a pointer-events-none fixed top-0 left-0 w-72 -translate-x-12 -translate-y-12 opacity-[0.07]" />
+      <CarIcon className="anim-float-b pointer-events-none fixed top-0 right-0 w-72 opacity-[0.07]" style={{ transform: "scaleX(-1) rotate(-12deg) translateX(48px) translateY(-48px)" }} />
+      <CarIcon className="anim-float-c pointer-events-none fixed bottom-0 left-0 w-52 -translate-x-8 translate-y-10 opacity-[0.05]" />
+      <CarIcon className="anim-float-d pointer-events-none fixed bottom-0 right-0 w-52 opacity-[0.05]" style={{ transform: "scaleX(-1) rotate(6deg) translateX(32px) translateY(40px)" }} />
+      <CarIcon className="pointer-events-none fixed top-1/2 left-0 w-36 -translate-x-10 -translate-y-1/2 rotate-6 opacity-[0.04]" />
+      <CarIcon className="pointer-events-none fixed top-1/3 right-0 w-28 translate-x-8 opacity-[0.04]" style={{ transform: "scaleX(-1) rotate(-8deg) translateX(32px)" }} />
+      {/* subtle dot-grid overlay */}
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.04]"
+        style={{
+          backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
+
+      <div className="relative mx-auto max-w-3xl px-4 py-10">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="anim-fade-up-1 mb-8 flex items-center justify-between">
           <button
             onClick={() => router.push("/")}
-            className="text-sm text-slate-500 hover:text-slate-800 flex items-center border border-slate-300 rounded-full px-3 py-1"
+            className="text-sm text-white/70 hover:text-white flex items-center border border-white/20 rounded-full px-3 py-1 bg-white/10 hover:bg-white/20 transition"
           >
-            Return to Scheduler
+            ← Scheduler
           </button>
-          <h1 className="text-3xl font-bold text-slate-800 align-middle">Associates</h1>
+          <img src="/SCHEDULE_MAX.png" alt="ScheduleMax" className="h-10 w-auto object-contain rounded" />
           <button
             onClick={openAdd}
             className="rounded-full px-5 py-2 text-sm font-semibold text-white"
@@ -159,7 +225,7 @@ export default function EmployeesPage() {
 
         {/* Form */}
         {showForm && (
-          <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg">
+          <div className="anim-fade-up-2 mb-8 rounded-2xl bg-white p-6 shadow-lg">
             <h2 className="mb-5 text-xl font-semibold text-slate-800">
               {editingId ? "Edit Associate" : "New Associate"}
             </h2>
@@ -319,12 +385,12 @@ export default function EmployeesPage() {
 
         {/* Employee List */}
         {employees.length === 0 && !showForm ? (
-          <div className="mt-20 text-center text-slate-400">
+          <div className="anim-fade-up-3 mt-20 text-center text-slate-400">
             <p className="text-lg font-medium">No associates yet.</p>
             <p className="text-sm mt-1">Click &quot;+ Add&quot; to get started.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="anim-fade-up-3 space-y-3">
             {employees.map((emp) => {
               const isExpanded = !collapsedIds.has(emp.id);
               const avail = emp.availability as Record<string, [number, number] | null> | null;

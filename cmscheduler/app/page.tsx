@@ -8,6 +8,7 @@ import {
   saveSchedule,
   deleteSchedule,
   updateSchedule,
+  getAISettings,
   EmployeeData,
   ScheduleData,
   ShiftEntry,
@@ -32,6 +33,47 @@ function getNextMonday(): string {
   return monday.toISOString().split("T")[0];
 }
 
+const animationStyles = `
+  @keyframes floatA {
+    0%, 100% { transform: translateY(0px) rotate(12deg); }
+    50% { transform: translateY(-18px) rotate(14deg); }
+  }
+  @keyframes floatB {
+    0%, 100% { transform: scaleX(-1) rotate(-12deg) translateX(40px) translateY(-40px); }
+    50% { transform: scaleX(-1) rotate(-10deg) translateX(40px) translateY(-58px); }
+  }
+  @keyframes floatC {
+    0%, 100% { transform: translateY(0px) rotate(-6deg); }
+    50% { transform: translateY(-12px) rotate(-8deg); }
+  }
+  @keyframes floatD {
+    0%, 100% { transform: scaleX(-1) rotate(6deg) translateX(24px) translateY(32px); }
+    50% { transform: scaleX(-1) rotate(8deg) translateX(24px) translateY(20px); }
+  }
+  @keyframes orbPulse {
+    0%, 100% { opacity: 0.12; transform: scale(1); }
+    50% { opacity: 0.18; transform: scale(1.08); }
+  }
+  @keyframes orbPulse2 {
+    0%, 100% { opacity: 0.10; transform: scale(1); }
+    50% { opacity: 0.15; transform: scale(1.06); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .anim-float-a { animation: floatA 7s ease-in-out infinite; }
+  .anim-float-b { animation: floatB 8s ease-in-out infinite; }
+  .anim-float-c { animation: floatC 9s ease-in-out infinite 1s; }
+  .anim-float-d { animation: floatD 10s ease-in-out infinite 0.5s; }
+  .anim-orb-1   { animation: orbPulse 6s ease-in-out infinite; }
+  .anim-orb-2   { animation: orbPulse2 8s ease-in-out infinite 2s; }
+  .anim-fade-up-1 { animation: fadeUp 0.5s ease-out both; }
+  .anim-fade-up-2 { animation: fadeUp 0.5s ease-out 0.15s both; }
+  .anim-fade-up-3 { animation: fadeUp 0.5s ease-out 0.3s both; }
+  .anim-fade-up-4 { animation: fadeUp 0.5s ease-out 0.45s both; }
+`;
+
 export default function Home() {
   const router = useRouter();
 
@@ -44,6 +86,9 @@ export default function Home() {
   const [weekOf, setWeekOf] = useState(getNextMonday());
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,6 +97,7 @@ export default function Home() {
   useEffect(() => {
     setEmployees(getEmployees());
     setSchedules(getSchedules());
+    setAiEnabled(getAISettings().enabled);
   }, []);
 
   const refresh = () => {
@@ -69,6 +115,7 @@ export default function Home() {
     if (employees.length === 0) return;
     setGenerating(true);
     setGenerateError(null);
+    setAiError(null);
     try {
       // Dynamic import keeps the mutable module state client-only
       const mod = await import("@/utils/schedulerAlgorithm");
@@ -82,7 +129,9 @@ export default function Home() {
       );
       mod.generateSchedule(empInstances);
       const warnings: string[] = mod.validateSchedule(empInstances);
-      const scheduleCopy = JSON.parse(JSON.stringify(mod.finalSchedule));
+      const scheduleCopy: Record<string, ShiftEntry[]> = JSON.parse(JSON.stringify(mod.finalSchedule));
+
+      // Save the base (algorithm-only) schedule
       saveSchedule({
         weekOf,
         generatedOn: new Date().toISOString(),
@@ -90,6 +139,50 @@ export default function Home() {
         warnings,
       });
       refresh();
+
+      // ── AI-assisted pass (optional) ─────────────────────────────────────────
+      const aiSettings = getAISettings();
+      if (aiSettings.enabled && aiSettings.contextPrompt.trim()) {
+        setAiGenerating(true);
+        try {
+          const res = await fetch("/api/ai-schedule", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contextPrompt: aiSettings.contextPrompt,
+              weekOf,
+              employees: employees.map((e) => ({
+                name: e.name,
+                role: e.role,
+                isFullTime: e.isFullTime,
+                hoursPerWeek: e.hoursPerWeek,
+                isLead: e.isLead,
+                preferredDayOff: e.preferredDayOff,
+                preferClosing: e.preferClosing,
+                isOffSaturday: e.isOffSaturday,
+              })),
+              baseSchedule: scheduleCopy,
+            }),
+          });
+          const data = await res.json() as { schedule?: Record<string, ShiftEntry[]>; error?: string };
+          if (!res.ok || data.error) {
+            setAiError(data.error ?? "AI generation failed.");
+          } else if (data.schedule) {
+            saveSchedule({
+              weekOf,
+              generatedOn: new Date().toISOString(),
+              schedule: data.schedule,
+              warnings: ["AI-assisted schedule — review carefully before using."],
+            });
+            refresh();
+          }
+        } catch (aiErr) {
+          setAiError("Could not reach the AI service. Check your connection.");
+          console.error(aiErr);
+        } finally {
+          setAiGenerating(false);
+        }
+      }
     } catch (err) {
       setGenerateError("Failed to generate schedule. Check the console for details.");
       console.error(err);
@@ -149,17 +242,31 @@ export default function Home() {
   return (
     <div
       className="relative min-h-screen flex flex-col text-slate-900 overflow-hidden"
-      style={{ background: "linear-gradient(135deg, #001a33 0%, #003366 60%, #00244d 100%)" }}
+      style={{ background: "linear-gradient(135deg, #001a33 0%, #003366 55%, #00244d 85%, #1a1200 100%)" }}
     >
-      <CarIcon className="pointer-events-none fixed top-0 left-0 w-64 -translate-x-10 -translate-y-10 rotate-12 opacity-[0.08]" />
-      <CarIcon className="pointer-events-none fixed top-0 right-0 w-64 translate-x-10 -translate-y-10 -rotate-12 opacity-[0.08]" style={{ transform: "scaleX(-1) rotate(-12deg) translateX(40px) translateY(-40px)" }} />
-      <CarIcon className="pointer-events-none fixed bottom-0 left-0 w-48 -translate-x-6 translate-y-8 -rotate-6 opacity-[0.06]" />
-      <CarIcon className="pointer-events-none fixed bottom-0 right-0 w-48 translate-x-6 translate-y-8 rotate-6 opacity-[0.06]" style={{ transform: "scaleX(-1) rotate(6deg) translateX(24px) translateY(32px)" }} />
+      <style>{animationStyles}</style>
+      {/* Yellow glow orbs */}
+      <div className="anim-orb-1 pointer-events-none fixed top-[-120px] right-[-80px] w-[420px] h-[420px] rounded-full" style={{ background: "radial-gradient(circle, #f5c400 0%, transparent 70%)" }} />
+      <div className="anim-orb-2 pointer-events-none fixed bottom-[-100px] left-[-60px] w-[320px] h-[320px] rounded-full" style={{ background: "radial-gradient(circle, #e6a800 0%, transparent 70%)" }} />
+      <div className="pointer-events-none fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] opacity-[0.05]" style={{ background: "radial-gradient(ellipse, #ffd000 0%, transparent 70%)" }} />
+      <CarIcon className="anim-float-a pointer-events-none fixed top-0 left-0 w-64 -translate-x-10 -translate-y-10 opacity-[0.08]" />
+      <CarIcon className="anim-float-b pointer-events-none fixed top-0 right-0 w-64 opacity-[0.08]" style={{ transform: "scaleX(-1) rotate(-12deg) translateX(40px) translateY(-40px)" }} />
+      <CarIcon className="anim-float-c pointer-events-none fixed bottom-0 left-0 w-48 -translate-x-6 translate-y-8 opacity-[0.06]" />
+      <CarIcon className="anim-float-d pointer-events-none fixed bottom-0 right-0 w-48 opacity-[0.06]" style={{ transform: "scaleX(-1) rotate(6deg) translateX(24px) translateY(32px)" }} />
+      <CarIcon className="pointer-events-none fixed top-1/2 left-0 w-36 -translate-x-10 -translate-y-1/2 rotate-6 opacity-[0.04]" />
+      <CarIcon className="pointer-events-none fixed top-1/3 right-0 w-28 opacity-[0.04]" style={{ transform: "scaleX(-1) rotate(-8deg) translateX(28px)" }} />
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.04]"
+        style={{
+          backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
       <div className="flex-1 mx-auto max-w-4xl px-4 py-10 flex flex-col">
 
         {/* ── Header ── */}
-        <div className="mb-10 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-white">ScheduleMax</h1>
+        <div className="anim-fade-up-1 mb-10 flex items-center justify-between">
+          <img src="/SCHEDULE_MAX.png" alt="ScheduleMax" className="h-12 w-auto object-contain" />
           <button
             onClick={() => router.push("/employees")}
             className="rounded-full px-5 py-2 text-sm font-semibold text-white"
@@ -170,7 +277,7 @@ export default function Home() {
         </div>
 
         {/* ── Associates ── */}
-        <section className="mb-10">
+        <section className="anim-fade-up-2 mb-10">
           <h2 className="mb-3 text-base font-semibold text-blue-200 uppercase tracking-wide">
             Associates ({employees.length})
           </h2>
@@ -212,7 +319,7 @@ export default function Home() {
         </section>
 
         {/* ── Generate Schedule ── */}
-        <section className="mb-10">
+        <section className="anim-fade-up-3 mb-10">
           <h2 className="mb-3 text-base font-semibold text-blue-200 uppercase tracking-wide">
             Generate Schedule
           </h2>
@@ -231,12 +338,23 @@ export default function Home() {
               </div>
               <button
                 onClick={handleGenerate}
-                disabled={generating || employees.length === 0}
+                disabled={generating || aiGenerating || employees.length === 0}
                 className="rounded-full px-6 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: carmaxBlue }}
               >
-                {generating ? "Generating…" : "Generate Schedule"}
+                {generating ? "Generating…" : aiGenerating ? "AI Adjusting…" : "Generate Schedule"}
               </button>
+              <button
+                onClick={() => { router.push("/context"); }}
+                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                  aiEnabled
+                    ? "bg-green-50 text-green-700 hover:bg-green-100"
+                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                }`}
+              >
+                {aiEnabled ? "✓ AI Enabled" : "AI Assistant (Beta)"}
+              </button>
+
             </div>
             {employees.length === 0 && (
               <p className="mt-2 text-xs text-red-500">
@@ -246,11 +364,18 @@ export default function Home() {
             {generateError && (
               <p className="mt-2 text-xs text-red-500">{generateError}</p>
             )}
+            {aiGenerating && (
+              <p className="mt-2 text-xs text-blue-600">AI is reviewing the schedule…</p>
+            )}
+            {aiError && (
+              <p className="mt-2 text-xs text-amber-600">AI adjustment failed: {aiError}</p>
+            )}
           </div>
         </section>
 
+
         {/* ── Schedules ── */}
-        <section>
+        <section className="anim-fade-up-4">
           <h2 className="mb-3 text-base font-semibold text-blue-200 uppercase tracking-wide">
             Schedules ({schedules.length})
           </h2>
@@ -271,7 +396,14 @@ export default function Home() {
                     {/* Card header */}
                     <div className="flex items-center justify-between px-5 py-4">
                       <div>
-                        <p className="font-semibold text-slate-800">Week of {weekDate}</p>
+                        <p className="font-semibold text-slate-800">
+                          Week of {weekDate}
+                          {sched.warnings.some((w) => w.startsWith("AI-assisted")) && (
+                            <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">
+                              AI
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs text-slate-400">
                           Generated {new Date(sched.generatedOn).toLocaleString()}
                           {sched.warnings.length > 0 && (
