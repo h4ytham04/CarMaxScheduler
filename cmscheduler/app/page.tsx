@@ -77,9 +77,10 @@ const animationStyles = `
 export default function Home() {
   const router = useRouter();
 
-  const [accepted, setAccepted] = useState(() =>
-    sessionStorage.getItem("scheduleMaxAccepted") === "true"
-  );
+  const [accepted, setAccepted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem("scheduleMaxAccepted") === "true";
+  });
   const [closing, setClosing] = useState(false);
   const [employees, setEmployees] = useState<EmployeeData[]>([]);
   const [schedules, setSchedules] = useState<ScheduleData[]>([]);
