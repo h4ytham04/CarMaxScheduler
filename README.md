@@ -1,6 +1,4 @@
-Good, I can see the repo structure. It's JavaScript/TypeScript/CSS with a cmscheduler folder. Here's a solid README you can add:
-
-markdown# CarMax Scheduler
+# CarMax Scheduler
 
 A web-based scheduling automation tool built to help Business Office Managers at CarMax automatically generate associate schedules based on configurable per-associate settings.
 
